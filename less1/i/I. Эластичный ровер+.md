@@ -1,0 +1,1 @@
+https://contest.yandex.ru/contest/74964/problems/I/
