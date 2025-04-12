@@ -2,5 +2,6 @@
 *.out
 *.bin
 *.exe
+cover.html
 bin/
 cover.html

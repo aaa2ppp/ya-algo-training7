@@ -32,10 +32,18 @@ import (
 // событий материальной жизни, а в случае, если это возможно сделать несколькими
 // способами, нужно сделать это за наименьшее количество дней.
 
+// Ограничения:
+// 	1 <= N <= 1000
+// 	1 <= D <= 1000
+// 	1 <= mi <= 10000
+// 	1 <= |namei| <= 40
+
 type event struct {
 	name   string
 	weight int
 }
+
+type solveFunc func(int, []event) (int, []string)
 
 func solve(maxWeightDif int, events []event) (totalDays int, eventNames []string) {
 	slices.SortFunc(events, func(a, b event) int {
@@ -44,46 +52,46 @@ func solve(maxWeightDif int, events []event) (totalDays int, eventNames []string
 
 	maxWeight := 0
 	for i := range events {
-		maxWeight += events[i].weight
+		maxWeight = max(maxWeight, events[i].weight)
 	}
+
+	const infinity = math.MaxInt
 
 	// будем записывать в dp минимальное число дней которые необходимы,
 	// чтобы отказаться от суммарного веса событий
 	dp := make([]int, maxWeight+1)
 	for i := range dp {
-		dp[i] = -1
+		dp[i] = infinity
 	}
 	dp[0] = 0
 
 	topWeight := 0
 	for _, event := range events {
-		minDays := math.MaxInt // чтобы отказаться от возвращенных событий
+		minDays := infinity // чтобы отказаться от текущего события
 
+		// ищем минимальное количество дней для отказа от необходимого возврата >= weight - maxWeightDif
 		for j := max(0, event.weight-maxWeightDif); j <= topWeight; j++ {
-			if cnt := dp[j]; cnt != -1 && cnt < minDays {
-				minDays = dp[j]
-			}
+			minDays = min(minDays, dp[j])
 		}
 
-		if debugEnable {
-			log.Println(event, "minDays:", minDays)
-		}
-
-		if minDays == math.MaxInt {
+		if minDays == infinity {
 			// oops!.. событие слишком весомое, чтобы от него отказаться
 			break
 		}
 
 		minDays++ // отказ от текущего события
+
+		if debugEnable {
+			log.Println(event, "minDays:", minDays)
+		}
+
 		eventNames = append(eventNames, event.name)
 		totalDays += minDays
 
 		topWeight = min(topWeight+event.weight, maxWeight)
 		for j := topWeight; j >= event.weight; j-- {
-			if cnt := dp[j-event.weight]; cnt != -1 {
-				if dp[j] == -1 || dp[j] > cnt+minDays {
-					dp[j] = cnt + minDays
-				}
+			if prev := dp[j-event.weight]; prev != infinity {
+				dp[j] = min(dp[j], prev+minDays)
 			}
 		}
 	}
