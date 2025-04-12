@@ -4,11 +4,37 @@ import (
 	"bufio"
 	"io"
 	"log"
+	"math"
 	"os"
 	"slices"
 	"strconv"
 	"unsafe"
 )
+
+// Один из главных недостатков ровера-доставщика — ограниченный по объёму отсек,
+// в котором иногда чуть-чуть не хватает места. Экспериментальная модель ровера
+// обладает эластичным отсеком для перевозки заказов.
+
+// Базовый объём отсека составляет S литров. Пока отсек не заполнен, товары в нём
+// не испытывают дополнительного давления. Однако, поскольку отсек эластичный,
+// в него можно положить дополнительные товары сверх базового объёма. Если объём
+// положенных в отсек товаров U превышает S, то все товары в отсеке будут испытывать
+// давление P=U−S.
+
+// Каждый товар обладает тремя характеристиками: объёмом vi, стоимостью ci и
+// давлением, которое он выдерживает pi.
+
+// Всего необходимо доставить N товаров, однако в первую поездку ровера необходимо
+// отправить товары с максимальной суммарной стоимостью — это обрадует заказчика.
+// Определите максимальную стоимость товаров, которые можно разместить в ровере
+// так, чтобы все они выдерживали давление.
+
+// Ограничения:
+// 	1 <= N <= 100
+// 	0 <= S <= 10^9
+// 	1 <= vi <= 1000
+// 	0 <= ci <= 10^6
+// 	0 <= pi <= 10^9
 
 type item struct {
 	id       int
@@ -20,12 +46,30 @@ type item struct {
 func solve(maxVolume int, items []item) (int, []int) {
 	n := len(items)
 
+	// проверим сначала может и так все влезет
+	totalVolume := 0
+	maxPresscure := 0
+	minPresscure := math.MaxInt
+	for i := range items {
+		totalVolume += items[i].volume
+		minPresscure = min(minPresscure, items[i].pressure)
+		maxPresscure = max(maxPresscure, items[i].pressure)
+	}
+
+	if totalVolume <= maxVolume+minPresscure {
+		totalCost := 0
+		allIDs := make([]int, n)
+		for i := 0; i < n; i++ {
+			totalCost += items[i].cost
+			allIDs[i] = items[i].id
+		}
+		return totalCost, allIDs
+	}
+
 	// сортируем по убыванию допустимого давления
 	slices.SortFunc(items, func(a, b item) int {
 		return b.pressure - a.pressure
 	})
-
-	maxPosiblePresscure := items[0].pressure
 
 	type dpItem struct {
 		idx  int // prev dp.i (of sorted items)
@@ -33,13 +77,13 @@ func solve(maxVolume int, items []item) (int, []int) {
 		cost int
 	}
 
-	dp := makeMatrix[dpItem](n+1, maxVolume+maxPosiblePresscure+1)
+	dp := makeMatrix[dpItem](n+1, maxVolume+maxPresscure+1)
 	for i := 1; i < len(dp[0]); i++ {
 		dp[0][i] = dpItem{-1, -1, -1}
 	}
 
 	var (
-		maxCost       = 0
+		maxCost       = -1
 		maxCostIdx    = 0 // dp.i
 		maxCostVolume = 0
 	)
@@ -78,12 +122,16 @@ func solve(maxVolume int, items []item) (int, []int) {
 		log.Printf("maxCost=%d at (%d,%d)\n", maxCost, maxCostIdx, maxCostVolume)
 	}
 
+	if maxCost == -1 {
+		// unpossible
+		return 0, nil
+	}
+
 	var ans []int
 	for i, j := maxCostIdx, maxCostVolume; j > 0; i, j = dp[i][j].idx, dp[i][j].prev {
 		ans = append(ans, items[dp[i][j].idx].id)
 	}
 
-	slices.Reverse(ans)
 	return maxCost, ans
 }
 
@@ -114,7 +162,10 @@ func run(in io.Reader, out io.Writer) {
 
 	maxCost, ans := solve(maxVolume, items)
 	writeInts(bw, []int{len(ans), maxCost}, defaultWriteOpts())
-	writeInts(bw, ans, defaultWriteOpts())
+	if len(ans) > 0 {
+		slices.Sort(ans) // на всякий случай
+		writeInts(bw, ans, defaultWriteOpts())
+	}
 }
 
 // ----------------------------------------------------------------------------
