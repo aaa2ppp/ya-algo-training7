@@ -42,50 +42,86 @@ func precalc(nums []int32) []item {
 	return tree
 }
 
-// query ищет максимум на *открытом* 0-base интервале [l, r)
+// query ищет k ноль на *открытом* 0-base интервале [l, r)
 func query(tree []item, ql, qr, k int) int {
 
 	// первые три числа определяют узел: индекс и контролируемый интервал
-	var dfs func(i, l, r, ql, qr, k int) int
+	var dfs func(i, l, r, ql, qr, k int) (int, int)
 
-	dfs = func(i, l, r, ql, qr, k int) int {
+	dfs = func(i, l, r, ql, qr, k int) (int, int) {
 		if debugEnable {
 			log.Println("dfs:", i, l, r, ql, qr, k)
 		}
 
+		// если интервал не пересекаются с моим
 		if qr <= l || r <= ql {
-			// не пересекается
-			return -1
+			// у меня нет k-го нуля и у меня нет ни одного нуля на этом интервале
+			return -1, 0
 		}
 
-		if tree[i].total < k {
-			return -1
+		// если интервал полностью накрывает мой
+		if ql <= l && r <= qr {
+
+			// если у меня не хватает нулей
+			if tree[i].total < k {
+				// у меня нет k-го нуля, но есть total нулей на этом интервале
+				return -1, tree[i].total
+			}
+
+			// k-й ноль *точно* есть
+
+			// если я состоитою только из нулей
+			if tree[i].total == r-l {
+				// bingo!
+				return l + k - 1, 0
+			}
+
+			// k-й ноль или в левом или в правом ребенке
+
+			m := (l + r) / 2
+			if tree[i].left >= k {
+				// *точно* в левом
+				return dfs(i*2+1, l, m, ql, qr, k)
+			} else {
+				// *точно* в правом
+				return dfs(i*2+2, m, r, ql, qr, k-tree[i].left)
+			}
 		}
 
-		if r-l == 1 {
-			return l
-		}
-
+		// есть неполное пересечение интервала с моим.
+		// ничего определенного сказать не могу, спрошу у детей...
 		m := (l + r) / 2
-		if tree[i].left >= k {
-			return dfs(i*2+1, l, m, ql, qr, k)
-		} else {
-			return dfs(i*2+2, m, r, ql, qr, k-tree[i].left)
+
+		// спрошу у левого ребенка
+		idx, lCnt := dfs(i*2+1, l, m, ql, qr, k)
+		if idx != -1 {
+			// bingo!
+			return idx, 0
 		}
+
+		// спросим у правого ребенка
+		idx, rCnt := dfs(i*2+2, m, r, ql, qr, k-lCnt)
+		if idx != -1 {
+			// bingo!
+			return idx, 0
+		}
+
+		// у меня нет k-го нуля, но я у меня есть несколько нулей на этом интервале
+		return -1, lCnt + rCnt
 	}
 
 	n := (len(tree) + 1) / 2
-	return dfs(0, 0, n, ql, qr, k)
+	idx, _ := dfs(0, 0, n, ql, qr, k)
+	return idx
 }
 
 func update(tree []item, i int, val int32) {
 	n := (len(tree) + 1) / 2
 	i += n - 1
-	if tree[i].total == 1 {
-		tree[i].total = 0
-	}
 	if val == 0 {
 		tree[i].total = 1
+	} else {
+		tree[i].total = 0
 	}
 	for i > 0 {
 		i = (i - 1) / 2 // переходим к родителю
@@ -141,7 +177,10 @@ func run(in io.Reader, out io.Writer) {
 			}
 			// делаем из закрытого 1-base интервала
 			// открытый 0-base интервал [l, r)
-			ans := query(tree, l-1, r, k) + 1
+			ans := query(tree, l-1, r, k)
+			if ans != -1 {
+				ans++
+			}
 			if debugEnable {
 				log.Printf("q %d %d %d -> %d", l, r, k, ans)
 			}
