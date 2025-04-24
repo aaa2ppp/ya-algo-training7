@@ -3,14 +3,16 @@ package main
 import (
 	"bufio"
 	"io"
+	"log"
 	"os"
 	"strconv"
 	"unsafe"
 )
 
 type item struct {
-	val uint64
-	len int
+	val     uint64
+	len     int
+	promise int32
 }
 
 // Простые числа от 100000 - выбирай не хочу
@@ -28,95 +30,147 @@ type item struct {
 // 101323 101333 101341 101347 101359 101363 101377 101383 101399 101411
 // 101419 101429 101449 101467 101477 101483 101489 101501 101503 101513
 // ...
-const multiplier = uint64(100069)
+const (
+	multiplier = uint64(100069)
+)
 
-var power []uint64
+var (
+	power    []uint64
+	powerSum []uint64
+)
 
 func precalc(nums []int32) []item {
 	n := 1
-	for n <= len(nums) { // нам нужен +1 символ в начале под 1
+	for n < len(nums) {
 		n *= 2
 	}
 
-	power = make([]uint64, n+1)
+	power = make([]uint64, n)
 	power[0] = 1
 	for i := 1; i < len(power); i++ {
 		power[i] = power[i-1] * multiplier
 	}
 
-	tree := make([]item, n*2)
-	tree[n-1] = item{val: 1, len: 1}
-	for i, j := 0, n; i < len(nums); i, j = i+1, j+1 {
-		tree[j] = item{val: uint64(nums[i]), len: 1}
+	powerSum = make([]uint64, n+1)
+	powerSum[0] = 0
+	for i := 0; i < len(power); i++ {
+		powerSum[i+1] += powerSum[i] + power[i]
 	}
 
-	for i := n + len(nums); i < len(tree); i++ {
-		tree[i] = item{val: 1, len: 1}
+	tree := make([]item, n*2-1)
+	for i, j := 0, n-1; i < len(nums); i, j = i+1, j+1 {
+		tree[j] = item{
+			val: uint64(nums[i]),
+			len: 1,
+		}
 	}
+
+	// for i := (n - 1) + len(nums); i < len(tree); i++ {
+	// 	tree[i] = item{val: 0, len: 0}
+	// }
 
 	for i := n - 2; i >= 0; i-- {
 		a, b := tree[i*2+1], tree[i*2+2]
-		tree[i] = item{
-			val: a.val*power[b.len] + b.val,
-			len: a.len + b.len,
-		}
+		tree[i] = calcNode(a, b)
 	}
 
 	return tree
 }
 
-func update(tree []item, ul, ur int, val int32) {
-	n := (len(tree) + 1) / 2
-	_ = n
-	// tree[i] = val
-
-	// for i > 0 {
-	// 	i = (i - 1) / 2 // переходим к родителю
-	// 	a, b := tree[i*2+1], tree[i*2+2]
-	// 	tree[i] = max(a, b)
-	// }
+func calcNode(a, b item) item {
+	return item{
+		val: a.val*power[b.len] + b.val,
+		len: a.len + b.len,
+	}
 }
 
-func compare(tree []item, l1, l2, size int) bool {
-
-	return false // TODO
+func updateNode(node *item, val int32) {
+	node.val = uint64(val) * powerSum[node.len]
+	node.promise = val
 }
 
-// query возвращает хешсумму на префиксе
-func query(tree []item, i int) uint64 {
+func fulfillPromise(tree []item, i int) {
+	if promise := tree[i].promise; promise != 0 {
+		updateNode(&tree[i*2+1], promise)
+		updateNode(&tree[i*2+2], promise)
+		tree[i].promise = 0
+	}
+}
+
+func update(tree []item, ql, qr int, val int32) {
 	n := (len(tree) + 1) / 2
-	_ = n
 
-	// var dfs func(i, l, r int) int
+	var dfs func(i, l, r int) bool
 
-	// dfs = func(i, l, r int) int {
-	// 	if tree[i] < target {
-	// 		// мой максимум меньше цели
-	// 		return -1
-	// 	}
+	dfs = func(i, l, r int) bool {
+		if debugEnable {
+			log.Println("dfs:", i, l, r, ql, qr)
+		}
 
-	// 	if r-l == 1 {
-	// 		// я лист
-	// 		return l
-	// 	}
+		// если интервал не пересекается с интервалом узла
+		if qr <= l || r <= ql {
+			return false
+		}
 
-	// 	// иначе спрошу у детей
-	// 	ans := -1
-	// 	m := (l + r) / 2
+		// если интервал полностью накрывает интервал узла
+		if ql <= l && r <= qr {
+			// обновим узел и пообещаем обновить детей
+			updateNode(&tree[i], val)
+			return true
+		}
 
-	// 	if ans == -1 && idx < m {
-	// 		ans = dfs(i*2+1, l, m)
-	// 	}
+		// иначе частичное пересечение
 
-	// 	if ans == -1 && idx < r {
-	// 		ans = dfs(i*2+2, m, r)
-	// 	}
+		// выполним ранее данное обещание
+		fulfillPromise(tree, i)
 
-	// 	return ans
-	// }
+		// и обновим детей
+		m := (l + r) / 2
+		aUpd := dfs(i*2+1, l, m)
+		bUpd := dfs(i*2+2, m, r)
+		if aUpd || bUpd {
+			a, b := tree[i*2+1], tree[i*2+2]
+			tree[i] = calcNode(a, b)
+		}
 
-	// return dfs(0, 0, n)
-	return 0 // TODO
+		return true
+	}
+
+	dfs(0, 0, n)
+}
+
+func query(tree []item, ql, qr int) uint64 {
+	n := (len(tree) + 1) / 2
+
+	var dfs func(i, l, r int) item
+
+	dfs = func(i, l, r int) item {
+		if debugEnable {
+			log.Println("dfs:", i, l, r, ql, qr)
+		}
+
+		// если интервал не пересекается с интервалом узла
+		if qr <= l || r <= ql {
+			return item{}
+		}
+
+		// если интервал полностью накрывает интервал узла
+		if ql <= l && r <= qr {
+			return tree[i]
+		}
+
+		// выполним обещание
+		fulfillPromise(tree, i)
+
+		// и спросим детей
+		m := (l + r) / 2
+		a := dfs(i*2+1, l, m)
+		b := dfs(i*2+2, m, r)
+		return calcNode(a, b)
+	}
+
+	ans := dfs(0, 0, n)
+	return ans.val
 }
 
 func run(in io.Reader, out io.Writer) {
@@ -149,13 +203,22 @@ func run(in io.Reader, out io.Writer) {
 		}
 		switch t {
 		case 0: // update
+			if debugEnable {
+				log.Println("== u", l, r, k)
+			}
 			// преходим из 1-base [l, r] в 0-base индексацию [l, r)
 			update(tree, l-1, r, int32(k))
 
 		case 1: // compare
-			l1, l2 := l, r
+			if debugEnable {
+				log.Println("== c", l, r, k)
+			}
 			// преходим из 1-base в 0-base индексацию
-			if compare(tree, l1-1, l2-1, k) {
+			l1, l2 := l-1, r-1
+			r1, r2 := l1+k, l2+k
+			a := query(tree, l1, r1)
+			b := query(tree, l2, r2)
+			if a == b {
 				bw.WriteByte('+')
 			} else {
 				bw.WriteByte('-')
@@ -164,6 +227,7 @@ func run(in io.Reader, out io.Writer) {
 			panic("unknown operation " + strconv.Itoa(t))
 		}
 	}
+	bw.WriteByte('\n')
 }
 
 // ----------------------------------------------------------------------------
