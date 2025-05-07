@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+const testData = "./test_data"
 
 func Test_run(t *testing.T) {
 	test_run(t, solve)
@@ -16,16 +19,19 @@ func Test_run_solw(t *testing.T) {
 	test_run(t, slowSolve)
 }
 
+type args struct {
+	in io.Reader
+}
+
+type test struct {
+	name    string
+	args    args
+	wantOut string
+	debug   bool
+}
+
 func test_run(t *testing.T, solve solveFunc) {
-	type args struct {
-		in io.Reader
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantOut string
-		debug   bool
-	}{
+	tests := []test{
 		{
 			"1",
 			args{strings.NewReader(`2 2
@@ -61,13 +67,7 @@ func test_run(t *testing.T, solve solveFunc) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			defer func(v bool) { debugEnable = v }(debugEnable)
-			debugEnable = tt.debug
-			out := &bytes.Buffer{}
-			run(tt.args.in, out, solve)
-			if gotOut := out.String(); trimLines(gotOut) != trimLines(tt.wantOut) {
-				t.Errorf("run() = %v, want %v", gotOut, tt.wantOut)
-			}
+			test_run_tt(t, solve, tt)
 		})
 	}
 }
@@ -83,57 +83,74 @@ func trimLines(text string) string {
 	return strings.Join(lines, "\n")
 }
 
+func test_run_tt(t *testing.T, solve solveFunc, tt test) {
+	defer func(v bool) { debugEnable = v }(debugEnable)
+	debugEnable = tt.debug
+	out := &bytes.Buffer{}
+	run(tt.args.in, out, solve)
+	if gotOut := out.String(); trimLines(gotOut) != trimLines(tt.wantOut) {
+		t.Errorf("run() = %v, want %v", gotOut, tt.wantOut)
+	}
+}
+
+func Test_run_solve_data(t *testing.T) {
+	list := []string{"14", "19", "21", "24"}
+	for _, num := range list {
+		name := "solve" + num
+		t.Run(name, func(t *testing.T) {
+			wantOut, err := os.ReadFile(filepath.Join(testData, num+".a"))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			in, err := os.Open(filepath.Join(testData, num))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer in.Close()
+
+			test_run_tt(t, solve, test{
+				"solve" + num,
+				args{in},
+				unsafeString(wantOut),
+				false,
+			})
+		})
+	}
+}
+
 func Benchmark_run(b *testing.B) {
+	list := []string{"14", "19", "21", "24"}
 
-	b.Run("run solve14", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			func() {
-				f, err := os.Open("./test_data/14")
-				if err != nil {
-					panic(err)
-				}
-				defer f.Close()
-				run(f, io.Discard, solve)
-			}()
-		}
-	})
+	for _, num := range list {
+		name := "solve" + num
+		b.Run(name, func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				func() {
+					f, err := os.Open(filepath.Join(testData, num))
+					if err != nil {
+						panic(err)
+					}
+					defer f.Close()
+					run(f, io.Discard, solve)
+				}()
+			}
+		})
+	}
 
-	b.Run("run solve21", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			func() {
-				f, err := os.Open("./test_data/21")
-				if err != nil {
-					panic(err)
-				}
-				defer f.Close()
-				run(f, io.Discard, solve)
-			}()
-		}
-	})
-
-	b.Run("run slow solve14", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			func() {
-				f, err := os.Open("./test_data/14")
-				if err != nil {
-					panic(err)
-				}
-				defer f.Close()
-				run(f, io.Discard, slowSolve)
-			}()
-		}
-	})
-
-	b.Run("run slow solve21", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			func() {
-				f, err := os.Open("./test_data/21")
-				if err != nil {
-					panic(err)
-				}
-				defer f.Close()
-				run(f, io.Discard, slowSolve)
-			}()
-		}
-	})
+	for _, num := range list {
+		name := "slow solve" + num
+		b.Run(name, func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				func() {
+					f, err := os.Open(filepath.Join(testData, num))
+					if err != nil {
+						panic(err)
+					}
+					defer f.Close()
+					run(f, io.Discard, slowSolve)
+				}()
+			}
+		})
+	}
 }

@@ -1,0 +1,1 @@
+[G. Острова](https://contest.yandex.ru/contest/74968/problems/G/)

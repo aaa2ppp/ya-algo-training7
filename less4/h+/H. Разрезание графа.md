@@ -1,0 +1,1 @@
+[H. Разрезание графа](https://contest.yandex.ru/contest/74968/problems/H/)

@@ -1,0 +1,1 @@
+[J. Простая река](https://contest.yandex.ru/contest/74968/problems/J/)

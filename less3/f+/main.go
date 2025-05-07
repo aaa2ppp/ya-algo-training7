@@ -6,6 +6,7 @@ import (
 	"iter"
 	"log"
 	"math"
+	"math/bits"
 	"os"
 	"strconv"
 	"unsafe"
@@ -42,22 +43,22 @@ func slowSolve(n, k int, points points) (bool, [3]int) {
 	}
 
 	if debugEnable {
-		log.Println("xy:")
-		for _, row := range xy {
-			log.Println(row)
-		}
-		log.Println("xz:")
-		for _, row := range xz {
-			log.Println(row)
-		}
-		log.Println("yz:")
-		for _, row := range yz {
-			log.Println(row)
-		}
+		log.Println("xy:", xyN)
+		// for _, row := range xy {
+		// 	log.Println(row)
+		// }
+		log.Println("xz:", xzN)
+		// for _, row := range xz {
+		// 	log.Println(row)
+		// }
+		log.Println("yz:", yzN)
+		// for _, row := range yz {
+		// 	log.Println(row)
+		// }
 	}
 
 	// TODO: убрать копипаст
-	if xyN > xzN && xyN > yzN {
+	if xyN >= xzN && xyN >= yzN {
 		for x := 0; x < n; x++ {
 			for y := 0; y < n; y++ {
 				if xy[x][y] != 0 {
@@ -71,7 +72,7 @@ func slowSolve(n, k int, points points) (bool, [3]int) {
 				}
 			}
 		}
-	} else if xzN > yzN {
+	} else if xzN >= xyN && xzN >= yzN {
 		for x := 0; x < n; x++ {
 			for z := 0; z < n; z++ {
 				if xz[x][z] != 0 {
@@ -85,7 +86,7 @@ func slowSolve(n, k int, points points) (bool, [3]int) {
 				}
 			}
 		}
-	} else { // yzN > xzN
+	} else { // yzN >= xyN && yzN >= xzN
 		for y := 0; y < n; y++ {
 			for z := 0; z < n; z++ {
 				if yz[y][z] != 0 {
@@ -109,10 +110,10 @@ type bitArray []uint64
 func makeBitArray(n int) bitArray {
 	arr := make([]uint64, (n+63)>>6)
 
-	// Если есть хвостик, то зальем его еденичками.
+	// Если есть хвостик, то зальем его единичками.
 	// Пригодиться, когда будем делать OR и искать нули
 	if k := n & 63; k != 0 {
-		arr[len(arr)-1] = math.MaxUint64 << k
+		arr[len(arr)-1] = math.MaxInt64 << k
 	}
 
 	return arr
@@ -130,19 +131,34 @@ func (arr bitArray) set(i int) {
 func (arr bitArray) zeros() iter.Seq[int] {
 	return func(yield func(int) bool) {
 		for i, v := range arr {
-			if v == math.MaxInt64 {
-				// все биты еденички
+			if v == math.MaxUint64 {
+				// все биты единички
 				continue
 			}
 
-			// ищем нулевые биты
-			for j := 0; j < 64; j++ {
-				if v&1 == 0 {
-					if !yield(i*64 + j) {
-						return
-					}
+			// // ищем нулевые биты
+			// for j := 0; j < 64; j++ {
+			// 	if v&1 == 0 {
+			// 		if !yield(i*64 + j) {
+			// 			return
+			// 		}
+			// 	}
+			// 	v >>= 1
+			// }
+
+			u := ^v
+			j := 0
+			for u > 0 {
+				cnt := bits.TrailingZeros64(u)
+				j += cnt
+				if (v>>j)&1 != 0 {
+					panic("I'm a sucker")
 				}
-				v >>= 1
+				if !yield(i*64 + j) {
+					return
+				}
+				u >>= cnt + 1
+				j++
 			}
 		}
 	}
@@ -154,19 +170,35 @@ func (arr bitArray) orAndZeros(other bitArray) iter.Seq[int] {
 	return func(yield func(int) bool) {
 		for i := range arr {
 			v := arr[i] | other[i]
-			if v == math.MaxInt64 {
-				// все биты еденички
+			if v == math.MaxUint64 {
+				// все биты единички
 				continue
 			}
 
 			// ищем нулевые биты
-			for j := 0; j < 64; j++ {
-				if v&1 == 0 {
-					if !yield(i*64 + j) {
-						return
-					}
+
+			// for j := 0; j < 64; j++ {
+			// 	if v&1 == 0 {
+			// 		if !yield(i*64 + j) {
+			// 			return
+			// 		}
+			// 	}
+			// 	v >>= 1
+			// }
+
+			u := ^v
+			j := 0
+			for u > 0 {
+				cnt := bits.TrailingZeros64(u)
+				j += cnt
+				if (v>>j)&1 != 0 {
+					panic("I'm a sucker")
 				}
-				v >>= 1
+				if !yield(i*64 + j) {
+					return
+				}
+				u >>= cnt + 1
+				j++
 			}
 		}
 	}
@@ -222,22 +254,25 @@ func solve(n, k int, points points) (bool, [3]int) {
 	}
 
 	if debugEnable {
-		log.Println("xy:")
-		for _, row := range xy {
-			log.Printf("%064b", row)
-		}
-		log.Println("xz:")
-		for _, row := range xz {
-			log.Printf("%064b", row)
-		}
-		log.Println("yz:")
-		for _, row := range yz {
-			log.Printf("%064b", row)
-		}
+		log.Println("xy:", xyN)
+		// for _, row := range xy {
+		// 	log.Println(row)
+		// }
+		log.Println("xz:", xzN)
+		// for _, row := range xz {
+		// 	log.Println(row)
+		// }
+		log.Println("yz:", yzN)
+		// for _, row := range yz {
+		// 	log.Println(row)
+		// }
 	}
 
 	// TODO: убрать копипаст
-	if xyN > xzN && xyN > yzN {
+	if xyN >= xzN && xyN >= yzN {
+		if debugEnable {
+			log.Println("use xy")
+		}
 		for x := 0; x < n; x++ {
 			for y := range xy[x].zeros() {
 				for z := range xz[x].orAndZeros(yz[y]) {
@@ -245,7 +280,10 @@ func solve(n, k int, points points) (bool, [3]int) {
 				}
 			}
 		}
-	} else if xzN > yzN {
+	} else if xzN >= xyN && xzN >= yzN {
+		if debugEnable {
+			log.Println("use xz")
+		}
 		for x := 0; x < n; x++ {
 			for z := range xz[x].zeros() {
 				for y := range xy[x].orAndZeros(zy[z]) {
@@ -253,7 +291,10 @@ func solve(n, k int, points points) (bool, [3]int) {
 				}
 			}
 		}
-	} else { // yzN > xzN
+	} else { // yzN >= xyN && yzN >= xzN
+		if debugEnable {
+			log.Println("use yz")
+		}
 		for y := 0; y < n; y++ {
 			for z := range yz[y].zeros() {
 				for x := range yx[y].orAndZeros(zx[z]) {
@@ -304,11 +345,11 @@ var _, debugEnable = os.LookupEnv("DEBUG")
 
 func main() {
 	_ = debugEnable
-	// if _, ok := os.LookupEnv("SLOW"); ok {
+	if _, ok := os.LookupEnv("SLOW"); ok {
 		run(os.Stdin, os.Stdout, slowSolve)
-	// } else {
-	// 	run(os.Stdin, os.Stdout, solve)
-	// }
+	} else {
+		run(os.Stdin, os.Stdout, solve)
+	}
 }
 
 // ----------------------------------------------------------------------------
